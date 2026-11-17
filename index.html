@@ -182,10 +182,12 @@ details[open]>summary{margin-bottom:10px}
 
 <footer class="foot">
   <span data-bind="loja"></span> · <span data-bind="tel"></span><br>
-  <button id="adminBtn" type="button" aria-label="Área administrativa">&#9881; Admin</button>
+  <button id="adminBtn" type="button">&#9881; Admin</button>
 </footer>
 
-<a class="btn btn-wa fab" data-wa href="#">Pedir pelo WhatsApp</a>
+<nav aria-label="Pedido pelo WhatsApp">
+  <a class="btn btn-wa fab" data-wa href="#">Pedir pelo WhatsApp</a>
+</nav>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <dialog id="adm" aria-labelledby="admT">
@@ -271,7 +273,7 @@ details[open]>summary{margin-bottom:10px}
 
 <script type="application/json" id="dados">
 {
- "versao": 1794957148507,
+ "versao": 1794955099093,
  "loja": "Menino da Trufa",
  "chamada": "Trufas gourmet feitas à mão, do jeito que você gosta",
  "whatsapp": "5513997170617",
