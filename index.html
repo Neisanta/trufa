@@ -271,7 +271,7 @@ details[open]>summary{margin-bottom:10px}
 
 <script type="application/json" id="dados">
 {
- "versao": 1794956175848,
+ "versao": 1794955099093,
  "loja": "Menino da Trufa",
  "chamada": "Trufas gourmet feitas à mão, do jeito que você gosta",
  "whatsapp": "5513997170617",
@@ -340,6 +340,8 @@ details[open]>summary{margin-bottom:10px}
 const ADMIN = { usuario: "admin", senhaHash: "01cfe10db577ee0334107c36e80de1b3f3fe663662f373ee44d8ac99a295b761" };
 const KEY = "mdt_rascunho_v2";
 const GH_KEY = "mdt_github_v1";
+let ghRevisaoLocal = 0;
+let ghRevisaoPublicada = 0;
 
 const $ = s => document.querySelector(s);
 const brl = n => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -452,6 +454,7 @@ function confirma(b, fn) { // confirmação em dois toques (caixas do navegador 
 }
 const dlg = $("#adm"); let editId = null, imgArq = "";
 function persistir(ok) {
+  ghRevisaoLocal++;
   if (!salvar()) msg("Não consegui salvar neste navegador (armazenamento cheio ou bloqueado). As alterações valem só até recarregar.");
   else if (ok) msg(ok);
   aplicar(); listar();
@@ -661,7 +664,7 @@ async function publicarGitHub(automatico = false) {
     ghPublicacaoAtiva = null;
     if (ghPublicacaoPendente) {
       ghPublicacaoPendente = false;
-      setTimeout(() => publicarGitHub(true), 0);
+      if (ghRevisaoLocal > ghRevisaoPublicada) setTimeout(() => publicarGitHub(true), 0);
     }
   }
 }
@@ -679,6 +682,7 @@ async function executarPublicacaoGitHub(automatico = false) {
   botao.disabled = true;
   ghCampo("ghStatus").textContent = "Publicando...";
   try {
+    const revisaoPublicada = ghRevisaoLocal;
     const caminhoBase = "/repos/" + cfg.repo.split("/").map(encodeURIComponent).join("/") + "/contents/" +
       cfg.file.split("/").map(encodeURIComponent).join("/");
     const caminhoLeitura = caminhoBase + "?ref=" + encodeURIComponent(cfg.branch);
@@ -686,7 +690,7 @@ async function executarPublicacaoGitHub(automatico = false) {
     novo.versao = Date.now();
     const json = JSON.stringify(novo, null, 1).replace(/</g, "\\u003c");
     let resposta = null;
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    for (let tentativa = 1; tentativa <= 4; tentativa++) {
       const atual = await ghApi(caminhoLeitura);
       const bin = atob(String(atual.content || "").replace(/\s/g, ""));
       const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
@@ -706,11 +710,15 @@ async function executarPublicacaoGitHub(automatico = false) {
         });
         break;
       } catch (e) {
-        if (e.status === 409 && tentativa < 2) continue;
+        if (e.status === 409 && tentativa < 4) {
+          await new Promise(resolve => setTimeout(resolve, 600 * tentativa));
+          continue;
+        }
         throw e;
       }
     }
     D.versao = novo.versao;
+    ghRevisaoPublicada = Math.max(ghRevisaoPublicada, revisaoPublicada);
     Object.assign(base, clone(novo));
     try {
       if (igual(D, novo)) localStorage.removeItem(KEY);
