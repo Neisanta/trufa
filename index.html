@@ -86,6 +86,10 @@ h2{font-size:clamp(1.8rem,5.5vw,2.6rem);font-weight:900}
 dialog{width:min(680px,100% - 20px);max-height:92vh;border:0;border-radius:22px;padding:20px;background:var(--cream);color:var(--ink)}
 dialog::backdrop{background:rgba(25,12,6,.75)}
 .adm-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.adm-tabs{display:flex;gap:4px;padding:4px;background:#eadfc8;border-radius:12px;margin-bottom:16px}
+.adm-tab{flex:1;min-height:44px;padding:8px 16px;border:0;border-radius:9px;background:transparent;color:var(--choc);font:800 .95rem "Nunito Sans",system-ui,sans-serif;cursor:pointer}
+.adm-tab[aria-selected="true"]{background:var(--choc);color:#fff;box-shadow:0 3px 10px rgba(42,20,11,.18)}
+.adm-tab:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 dialog form{display:grid;gap:10px;margin-bottom:12px}
 label{display:grid;gap:4px;font-weight:800;font-size:.92rem}
 input,textarea{font:inherit;padding:10px;border:2px solid var(--sand);border-radius:10px;background:#fff;width:100%;min-height:44px}
@@ -185,17 +189,21 @@ details[open]>summary{margin-bottom:10px}
 
 <dialog id="adm" aria-labelledby="admT">
   <div class="adm-h"><h2 id="admT" style="font-size:1.5rem">Área administrativa</h2><button class="mini" id="fechar" type="button">Fechar</button></div>
+  <div class="adm-tabs" role="tablist" aria-label="Acesso administrativo">
+    <button class="adm-tab" id="tabLogin" type="button" role="tab" aria-selected="true" aria-controls="login">Login</button>
+    <button class="adm-tab" id="tabPainel" type="button" role="tab" aria-selected="false" aria-controls="painel" hidden>Painel</button>
+  </div>
   <p id="amsg" class="warn" role="status" hidden></p>
 
-  <form id="login">
-    <p class="warn">Barreira básica de acesso: usuário e senha ficam no código da página e não oferecem segurança real. Serve só para uso pessoal; não reutilize senhas.</p>
+  <form id="login" role="tabpanel" aria-labelledby="tabLogin">
+    <p class="warn">Acesso por login. Como o site está hospedado no GitHub Pages, esta etapa protege o painel na interface, mas não substitui uma autenticação no servidor.</p>
     <label>Usuário<input id="u" autocomplete="username" required></label>
     <label>Senha<input id="s" type="password" autocomplete="current-password" required></label>
     <p id="erro" class="err" role="alert" hidden>Usuário ou senha incorretos.</p>
     <button class="btn btn-gold" style="background:var(--choc);color:#fff">Entrar</button>
   </form>
 
-  <div id="painel" hidden>
+  <div id="painel" role="tabpanel" aria-labelledby="tabPainel" hidden>
     <details open>
       <summary>Informações da loja</summary>
       <form id="cfg">
@@ -330,10 +338,11 @@ details[open]>summary{margin-bottom:10px}
    - As alterações feitas no painel ficam salvas apenas no navegador de quem
      editou (localStorage) até você clicar em "Baixar página atualizada" e
      enviar o novo index.html ao GitHub. Só então os clientes veem a mudança.
-   - AVISO: usuário e senha abaixo ficam visíveis no código e NÃO oferecem
-     segurança real. Troque a senha e não use uma senha que você usa em outro lugar.
+    - A senha do painel é comparada por hash e não fica em texto puro no HTML.
+    - Ainda assim, este é um site estático: a proteção é de interface, não uma
+      autenticação de servidor. Não reutilize esta senha em outros serviços.
    ===================================================================== */
-const ADMIN = { usuario: "admin", senha: "nhnh9nhnh9" };
+const ADMIN = { usuario: "admin", senhaHash: "01cfe10db577ee0334107c36e80de1b3f3fe663662f373ee44d8ac99a295b761" };
 const KEY = "mdt_rascunho_v2";
 const GH_KEY = "mdt_github_v1";
 
@@ -401,8 +410,8 @@ $("#copiar").onclick = async () => {
 
 /* ===================== Painel administrativo ===================== */
 const sess = { v: false,
-  get() { try { return sessionStorage.getItem("mdt_adm") === "1"; } catch (e) { return this.v; } },
-  set(x) { this.v = x; try { x ? sessionStorage.setItem("mdt_adm", "1") : sessionStorage.removeItem("mdt_adm"); } catch (e) { /* bloqueado */ } } };
+  get() { return this.v; },
+  set(x) { this.v = !!x; } };
 function msg(t) { const m = $("#amsg"); m.textContent = t; m.hidden = false; clearTimeout(msg.t); msg.t = setTimeout(() => m.hidden = true, 5000); }
 function confirma(b, fn) { // confirmação em dois toques (caixas do navegador podem ser bloqueadas)
   if (b.dataset.c) { clearTimeout(+b.dataset.c); delete b.dataset.c; return fn(); }
@@ -417,19 +426,53 @@ function persistir(ok) {
   if ($("#ghAuto")?.checked && $("#ghToken")?.value) publicarGitHub(true);
 }
 
-$("#adminBtn").onclick = () => { dlg.showModal(); vista(); };
-$("#fechar").onclick = $("#ver").onclick = () => dlg.close();
+async function hashSenha(texto) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+}
+function fecharAdmin() { sess.set(false); $("#s").value = ""; dlg.close(); }
+$("#adminBtn").onclick = () => {
+  dlg.showModal();
+  vista();
+  if (!sess.get()) setTimeout(() => $("#u").focus(), 0);
+};
+$("#fechar").onclick = $("#ver").onclick = fecharAdmin;
+dlg.addEventListener("close", () => { sess.set(false); $("#s").value = ""; });
 function vista() {
   const ok = sess.get();
-  $("#login").hidden = ok; $("#painel").hidden = !ok;
+  $("#login").hidden = ok;
+  $("#painel").hidden = !ok;
+  $("#tabLogin").hidden = ok;
+  $("#tabPainel").hidden = !ok;
+  $("#tabLogin").setAttribute("aria-selected", String(!ok));
+  $("#tabPainel").setAttribute("aria-selected", String(ok));
   if (ok) { cfgPreencher(); listar(); ghPreencher(); }
 }
-$("#login").onsubmit = e => {
+$("#login").onsubmit = async e => {
   e.preventDefault();
-  if ($("#u").value === ADMIN.usuario && $("#s").value === ADMIN.senha) { sess.set(true); $("#s").value = ""; $("#erro").hidden = true; vista(); }
-  else $("#erro").hidden = false;
+  const botao = $("#login button"), erro = $("#erro");
+  erro.hidden = true;
+  botao.disabled = true;
+  try {
+    const usuario = $("#u").value.trim();
+    const hash = await hashSenha($("#s").value);
+    if (usuario === ADMIN.usuario && hash === ADMIN.senhaHash) {
+      sess.set(true);
+      $("#s").value = "";
+      vista();
+      setTimeout(() => $("#painel summary")?.focus(), 0);
+    } else {
+      erro.textContent = "Usuário ou senha incorretos.";
+      erro.hidden = false;
+    }
+  } catch (erroValidacao) {
+    erro.textContent = "Não foi possível validar o login neste navegador.";
+    erro.hidden = false;
+  } finally {
+    botao.disabled = false;
+  }
 };
-$("#sair").onclick = () => { sess.set(false); dlg.close(); };
+$("#sair").onclick = fecharAdmin;
 
 // Informações da loja
 const CAMPOS = { cl: "loja", ch: "chamada", cw: "whatsapp", ct: "telefone", cx: "pix", cp: "preco", cq: "comboQtd", cc: "comboPreco" };
