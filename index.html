@@ -233,8 +233,22 @@ details[open]>summary{margin-bottom:10px}
 
     <details>
       <summary>Publicar no GitHub</summary>
-      <p class="hint" style="margin-bottom:10px">As alterações ficam só neste navegador até você publicar. Baixe a página atualizada e envie o arquivo <b>index.html</b> ao seu repositório (Add file, Upload files, mesmo nome). Em 1 a 2 minutos todos os clientes veem a versão nova.</p>
-      <div class="row">
+      <p class="hint" style="margin-bottom:10px">Conecte o repositório para publicar os dados do catálogo diretamente neste navegador. O token fica salvo apenas no armazenamento local deste navegador e nunca é incluído no site ou no commit.</p>
+      <form id="ghForm">
+        <div class="two">
+          <label>Repositório<input id="ghRepo" value="Neisanta/trufa" required></label>
+          <label>Branch<input id="ghBranch" value="main" required></label>
+        </div>
+        <label>Arquivo<input id="ghFile" value="index.html" required></label>
+        <label>Token de acesso<input id="ghToken" type="password" autocomplete="off" spellcheck="false" required></label>
+        <label class="chk"><input id="ghAuto" type="checkbox"> Publicar automaticamente ao salvar</label>
+        <div class="row">
+          <button class="btn btn-gold" id="ghSave" type="submit" style="background:var(--choc);color:#fff">Salvar e testar conexão</button>
+          <button class="btn btn-ghost dark" id="ghPublish" type="button">Publicar agora</button>
+        </div>
+        <p id="ghStatus" class="hint" role="status">Ainda não publicado por este navegador.</p>
+      </form>
+      <div class="row" style="margin-top:12px">
         <button class="btn btn-gold" id="baixar" type="button" style="background:var(--choc);color:#fff">Baixar página atualizada</button>
         <button class="btn btn-ghost dark" id="descartar" type="button">Descartar alterações</button>
       </div>
@@ -279,6 +293,7 @@ details[open]>summary{margin-bottom:10px}
    ===================================================================== */
 const ADMIN = { usuario: "admin", senha: "nhnh9nhnh9" };
 const KEY = "mdt_rascunho_v2";
+const GH_KEY = "mdt_github_v1";
 
 const $ = s => document.querySelector(s);
 const brl = n => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -357,6 +372,7 @@ function persistir(ok) {
   if (!salvar()) msg("Não consegui salvar neste navegador (armazenamento cheio ou bloqueado). As alterações valem só até recarregar.");
   else if (ok) msg(ok);
   aplicar(); listar();
+  if ($("#ghAuto")?.checked && $("#ghToken")?.value) publicarGitHub(true);
 }
 
 $("#adminBtn").onclick = () => { dlg.showModal(); vista(); };
@@ -364,7 +380,7 @@ $("#fechar").onclick = $("#ver").onclick = () => dlg.close();
 function vista() {
   const ok = sess.get();
   $("#login").hidden = ok; $("#painel").hidden = !ok;
-  if (ok) { cfgPreencher(); listar(); }
+  if (ok) { cfgPreencher(); listar(); ghPreencher(); }
 }
 $("#login").onsubmit = e => {
   e.preventDefault();
@@ -435,7 +451,140 @@ $("#form").onsubmit = e => {
   persistir("Trufa salva neste navegador. Para os clientes verem, publique (abaixo)."); limpar();
 };
 
-// Publicação: gera o index.html atualizado para enviar ao GitHub
+/* ===================== Publicação no GitHub ===================== */
+const GH_MSG = "Atualização pelo painel do site";
+const ghCampo = id => $("#" + id);
+
+function ghConfigValida() {
+  const cfg = {
+    repo: ghCampo("ghRepo").value.trim(),
+    branch: ghCampo("ghBranch").value.trim(),
+    file: ghCampo("ghFile").value.trim().replace(/^\/+/, ""),
+    token: ghCampo("ghToken").value.trim(),
+    auto: ghCampo("ghAuto").checked
+  };
+  if (!/^[^/]+\/[^/]+$/.test(cfg.repo)) throw new Error("Repositório inválido. Use proprietario/repositorio.");
+  if (!cfg.branch) throw new Error("Informe a branch.");
+  if (!cfg.file || cfg.file.includes("..")) throw new Error("Informe o caminho do arquivo.");
+  if (!cfg.token) throw new Error("Informe o token de acesso.");
+  return cfg;
+}
+
+function ghSalvarConfig(cfg = ghConfigValida()) {
+  try {
+    localStorage.setItem(GH_KEY, JSON.stringify(cfg));
+    return true;
+  } catch (e) {
+    throw new Error("Não consegui salvar a configuração neste navegador.");
+  }
+}
+
+function ghPreencher() {
+  try {
+    const c = JSON.parse(localStorage.getItem(GH_KEY) || "null");
+    if (!c) return;
+    ghCampo("ghRepo").value = c.repo || "Neisanta/trufa";
+    ghCampo("ghBranch").value = c.branch || "main";
+    ghCampo("ghFile").value = c.file || "index.html";
+    ghCampo("ghToken").value = c.token || "";
+    ghCampo("ghAuto").checked = !!c.auto;
+    if (c.lastPublished) ghCampo("ghStatus").textContent = "Publicado às " + c.lastPublished;
+  } catch (e) { /* configuração ausente */ }
+}
+
+async function ghApi(caminho, opcoes = {}) {
+  const cfg = ghConfigValida();
+  const r = await fetch("https://api.github.com" + caminho, {
+    ...opcoes,
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Authorization": "Bearer " + cfg.token,
+      ...(opcoes.headers || {})
+    }
+  });
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.message || "Erro " + r.status + " ao acessar o GitHub.");
+  return dados;
+}
+
+async function ghTestarConexao() {
+  const cfg = ghConfigValida();
+  ghSalvarConfig(cfg);
+  ghCampo("ghStatus").textContent = "Testando conexão...";
+  await ghApi("/repos/" + cfg.repo.split("/").map(encodeURIComponent).join("/"));
+  ghCampo("ghStatus").textContent = "Conexão OK";
+  msg("Conexão OK");
+  return true;
+}
+
+function ghBase64Utf8(texto) {
+  const bytes = new TextEncoder().encode(texto);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+async function publicarGitHub(automatico = false) {
+  let cfg;
+  try {
+    cfg = ghConfigValida();
+    ghSalvarConfig(cfg);
+  } catch (e) {
+    if (!automatico) { ghCampo("ghStatus").textContent = e.message; msg(e.message); }
+    return false;
+  }
+  const botao = ghCampo("ghPublish");
+  botao.disabled = true;
+  ghCampo("ghStatus").textContent = "Publicando...";
+  try {
+    const caminho = "/repos/" + cfg.repo.split("/").map(encodeURIComponent).join("/") + "/contents/" +
+      cfg.file.split("/").map(encodeURIComponent).join("/") + "?ref=" + encodeURIComponent(cfg.branch);
+    const atual = await ghApi(caminho);
+    const bin = atob(String(atual.content || "").replace(/\s/g, ""));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    const htmlAtual = new TextDecoder().decode(bytes);
+    const novo = clone(D);
+    novo.versao = Date.now();
+    const json = JSON.stringify(novo, null, 1).replace(/</g, "\\u003c");
+    const htmlNovo = htmlAtual.replace(/(<script type="application\/json" id="dados">)[\s\S]*?(<\/script>)/,
+      (m, a, b) => a + "\n" + json + "\n" + b);
+    const resposta = await ghApi("/repos/" + cfg.repo.split("/").map(encodeURIComponent).join("/") + "/contents/" +
+      cfg.file.split("/").map(encodeURIComponent).join("/"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: GH_MSG,
+          content: ghBase64Utf8(htmlNovo),
+          branch: cfg.branch,
+          sha: atual.sha
+        })
+      });
+    const publicado = new Date();
+    const hora = publicado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    cfg.lastPublished = hora;
+    ghSalvarConfig(cfg);
+    ghCampo("ghStatus").textContent = "Publicado às " + hora;
+    msg("Publicado às " + hora);
+    if (resposta.commit?.html_url) console.info("Commit publicado: " + resposta.commit.html_url);
+    return true;
+  } catch (e) {
+    ghCampo("ghStatus").textContent = "Erro ao publicar: " + e.message;
+    msg("Erro ao publicar: " + e.message);
+    return false;
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+$("#ghForm").onsubmit = async e => {
+  e.preventDefault();
+  try { await ghTestarConexao(); }
+  catch (erro) { ghCampo("ghStatus").textContent = erro.message; msg(erro.message); }
+};
+$("#ghPublish").onclick = () => publicarGitHub(false);
+
+// Publicação manual: gera o index.html atualizado para enviar ao GitHub
 $("#baixar").onclick = async () => {
   const novo = clone(D); novo.versao = Date.now();
   const json = JSON.stringify(novo, null, 1).replace(/</g, "\\u003c");
