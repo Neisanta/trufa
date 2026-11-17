@@ -76,7 +76,7 @@ h2{font-size:clamp(1.8rem,5.5vw,2.6rem);font-weight:900}
 .box h3{color:var(--gold2)}
 
 .foot{background:#1d0e07;color:var(--sand);padding:18px 16px;text-align:center;font-size:.95rem}
-#adminBtn{background:none;border:0;color:var(--sand);opacity:.5;min-width:44px;height:44px;padding:0 10px;font:inherit;font-size:.9rem;cursor:pointer}
+#adminBtn{background:none;border:0;color:var(--sand);opacity:.72;min-width:44px;height:44px;padding:0 10px;font:inherit;font-size:.9rem;cursor:pointer}
 #adminBtn:hover,#adminBtn:focus-visible{opacity:1}
 .fab{position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:30;max-width:520px;margin-inline:auto;box-shadow:0 10px 26px rgba(0,0,0,.4)}
 .toast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:var(--choc);color:#fff;padding:10px 20px;border-radius:999px;opacity:0;pointer-events:none;transition:.25s;z-index:40;max-width:90vw;text-align:center}
@@ -88,11 +88,12 @@ dialog::backdrop{background:rgba(25,12,6,.75)}
 .adm-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .adm-tabs{display:flex;gap:4px;padding:4px;background:#eadfc8;border-radius:12px;margin-bottom:16px}
 .adm-tab{flex:1;min-height:44px;padding:8px 16px;border:0;border-radius:9px;background:transparent;color:var(--choc);font:800 .95rem "Nunito Sans",system-ui,sans-serif;cursor:pointer}
-.adm-tab[aria-selected="true"]{background:var(--choc);color:#fff;box-shadow:0 3px 10px rgba(42,20,11,.18)}
+.adm-tab[aria-selected="true"]{background:var(--choc);color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.18)}
 .adm-tab:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 dialog form{display:grid;gap:10px;margin-bottom:12px}
 label{display:grid;gap:4px;font-weight:800;font-size:.92rem}
 input,textarea{font:inherit;padding:10px;border:2px solid var(--sand);border-radius:10px;background:#fff;width:100%;min-height:44px}
+dialog input,dialog textarea{font-size:1rem}
 input[type=color]{padding:2px}
 .chk{display:flex;align-items:center;gap:8px}.chk input{width:22px;min-height:22px}
 .two,.row{display:flex;flex-wrap:wrap;gap:10px}.two>label{flex:1 1 130px}
@@ -195,13 +196,15 @@ details[open]>summary{margin-bottom:10px}
   </div>
   <p id="amsg" class="warn" role="status" hidden></p>
 
-  <form id="login" role="tabpanel" aria-labelledby="tabLogin">
-    <p class="warn">Acesso por login. Como o site está hospedado no GitHub Pages, esta etapa protege o painel na interface, mas não substitui uma autenticação no servidor.</p>
-    <label>Usuário<input id="u" autocomplete="username" required></label>
-    <label>Senha<input id="s" type="password" autocomplete="current-password" required></label>
-    <p id="erro" class="err" role="alert" hidden>Usuário ou senha incorretos.</p>
-    <button class="btn btn-gold" style="background:var(--choc);color:#fff">Entrar</button>
-  </form>
+  <section id="login" role="tabpanel" aria-labelledby="tabLogin">
+    <form id="loginForm">
+      <p class="warn">Acesso por login. Como o site está hospedado no GitHub Pages, esta etapa protege o painel na interface, mas não substitui uma autenticação no servidor.</p>
+      <label>Usuário<input id="u" autocomplete="username" required></label>
+      <label>Senha<input id="s" type="password" autocomplete="current-password" required></label>
+      <p id="erro" class="err" role="alert" hidden>Usuário ou senha incorretos.</p>
+      <button class="btn btn-gold" style="background:var(--choc);color:#fff">Entrar</button>
+    </form>
+  </section>
 
   <div id="painel" role="tabpanel" aria-labelledby="tabPainel" hidden>
     <details open>
@@ -448,7 +451,7 @@ function vista() {
   $("#tabPainel").setAttribute("aria-selected", String(ok));
   if (ok) { cfgPreencher(); listar(); ghPreencher(); }
 }
-$("#login").onsubmit = async e => {
+$("#loginForm").onsubmit = async e => {
   e.preventDefault();
   const botao = $("#login button"), erro = $("#erro");
   erro.hidden = true;
